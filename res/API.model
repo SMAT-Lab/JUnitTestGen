@@ -1,0 +1,11 @@
+[
+   {
+         "packageName":"com.emu.autotestmotivation",
+         "className":"MainActivity",
+         "returnType":"void",
+         "methodName":"myAPI2",
+         "params":[
+            "java.lang.String"
+         ]
+   }
+]
