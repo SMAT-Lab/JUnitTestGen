@@ -2,10 +2,10 @@
 Automatic unit test cases generating
 
 
-## Setup
+### Setup
 The following is required to set up JUnitTestGen:
-* MAC system
-* IntelliJ IDEA
+MAC system
+IntelliJ IDEA
 
 ##### Step 1: Load dependencies to your local repository
 * git clone
