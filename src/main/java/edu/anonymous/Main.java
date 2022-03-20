@@ -70,8 +70,12 @@ public class Main {
         for (APITestCaseModel caseModel : GlobalRef.apiTestCaseModelList) {
             boolean isTestCaseGenerateSuccess = false;
             try {
+                if(caseModel.unit.toString().contains("android.os.Looper: void loop()")){
+                    continue;
+                }
                 isTestCaseGenerateSuccess = generateTestCase(caseModel);
             } catch (Exception e) {
+                System.out.println(e);
             }
 
             if (isTestCaseGenerateSuccess) {
@@ -175,19 +179,20 @@ public class Main {
             //add Activity architecture
             processActivityArchitecture(caseModel, sClass);
 
+            //add system.out method
+            SootMethod systemOutMethod = processOutMethod(sClass);
+
             //add Static architecture
             processStaticArchitecture(caseModel, sClass, testMethod);
-
-            //process Parameter
-            processContextAndParameter(caseModel);
-
-            //process super.method() invocation
-            processSuperMethodInvocation(caseModel);
 
             //add this identity
             addThisIdentityStmt(caseModel, sClass, body, units);
 
-            //((JAssignStmt) caseModel.baseBoxStmts.get(4)).getRightOpBox().getValue().getUseBoxes().get(0).setValue(((JAssignStmt) caseModel.baseBoxStmts.get(5)).getLeftOp());
+            //process Parameter
+            processContextAndParameter(caseModel, body, units);
+
+            //process super.method() invocation
+            processSuperMethodInvocation(caseModel);
 
             //Add test-case related locals & units[in BaseBox Min Context]
             if (CollectionUtils.isNotEmpty(caseModel.baseBoxStmts)) {
@@ -211,12 +216,23 @@ public class Main {
                         }
                     });
                     if (needAdd.get()) {
-                        units.add(stmt);
+                        if (stmt.toString().contains("@this")) {
+                            if (!units.isEmpty()) {
+                                units.insertBefore(stmt, units.getFirst());
+                            } else {
+                                units.add(stmt);
+                            }
+                        } else {
+                            units.add(stmt);
+                        }
                     }
                 }
             }
 
             //Add locals & units [in unit]
+            if (caseModel.unit.toString().contains("$r8.<android.content.Intent: android.content.Intent setClassName(android.content.Context,java.lang.String)>($r1, \"com.google.android.gms.ads.AdActivity\")")) {
+                System.out.println("jj");
+            }
             caseModel.unit.getUseAndDefBoxes().forEach(ub -> {
                 if ((ub.getValue() instanceof JimpleLocal) && !(ub.getValue() instanceof Constant)) {
                     if (!body.getLocals().contains((JimpleLocal) ub.getValue())) {
@@ -225,13 +241,87 @@ public class Main {
                         String params = Rgex.getSubUtilSimple(caseModel.unit.toString(), "(>\\(.*\\))");
 
                         if (params.contains(ub.getValue().toString())) {
-                            if (ApplicationClassFilter.isAndroidSystemPackage(ub.getValue().getType().toString())) {
-                                units.add(Jimple.v().newAssignStmt(ub.getValue(),
-                                        Jimple.v().newStaticInvokeExpr(
-                                                Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
-                                                new ImmediateBox(ClassConstant.v(ub.getValue().getType().toString().replaceAll("\\.", "\\/"))).getValue()
-                                        )
-                                ));
+                            if (ApplicationClassFilter.isClassInSystemPackage(ub.getValue().getType().toString())) {
+//                                units.add(Jimple.v().newAssignStmt(ub.getValue(),
+//                                        Jimple.v().newStaticInvokeExpr(
+//                                                Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
+//                                                new ImmediateBox(ClassConstant.v(ub.getValue().getType().toString().replaceAll("\\.", "\\/"))).getValue()
+//                                        )
+//                                        //Scene.v().getSootClass("android.content.Intent").getMethods().get(0)
+//                                ));
+
+                                //ConstructorMethod to replace easymock
+                                SootMethod paramSootMethod = getConstructorMethod(Scene.v().getSootClass(ub.getValue().getType().toString()));
+                                if (paramSootMethod.getParameterCount() == 0) {
+                                    if (paramSootMethod.isStatic()) {
+                                        units.add(Jimple.v().newAssignStmt((JimpleLocal) ub.getValue(), Jimple.v().newStaticInvokeExpr(paramSootMethod.makeRef())));
+                                    } else {
+                                        units.add(Jimple.v().newAssignStmt((JimpleLocal) ub.getValue(), Jimple.v().newNewExpr(RefType.v(ub.getValue().getType().toString()))));
+                                        units.add(Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr((JimpleLocal) ub.getValue(), paramSootMethod.makeRef())));
+                                    }
+                                } else if (paramSootMethod.getParameterCount() > 0) {
+                                    List<Value> paramList = new ArrayList<>();
+                                    boolean isPossible2MockPrams = true;
+                                    for (int paramNo = 0; paramNo < paramSootMethod.getParameterCount(); paramNo++) {
+                                        Type currentParam = paramSootMethod.getParameterType(paramNo);
+                                        if (currentParam instanceof PrimType) {
+                                            Local currentParamLocal = Jimple.v().newLocal("param" + paramNo, currentParam);
+                                            Value currentParamValue = newPrimType((PrimType) currentParam);
+                                            body.getLocals().add(currentParamLocal);
+                                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                                            paramList.add(currentParamValue);
+                                        } else if (currentParam instanceof ArrayType && currentParam.getArrayType().baseType instanceof PrimType) {
+                                            Local currentParamLocal = Jimple.v().newLocal("param" + paramNo, currentParam);
+                                            Value currentParamValue = newNewArrayExpr((PrimType) currentParam.getArrayType().baseType);
+                                            body.getLocals().add(currentParamLocal);
+                                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                                            paramList.add(currentParamValue);
+                                        } else if (ApplicationClassFilter.isJavaBasicType(currentParam.toString())) {
+                                            Local currentParamLocal = Jimple.v().newLocal("param" + paramNo, currentParam);
+                                            Value currentParamValue = newPrimType2(currentParam.toString());
+                                            body.getLocals().add(currentParamLocal);
+                                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                                            paramList.add(currentParamValue);
+                                        } else if (currentParam instanceof ArrayType
+                                                && currentParam.getArrayType().baseType instanceof RefType
+                                                && ApplicationClassFilter.isJavaBasicType(currentParam.getArrayType().baseType.toString())) {
+                                            Local currentParamLocal = Jimple.v().newLocal("param" + paramNo, currentParam);
+                                            newNewArrayExpr2(currentParam.toString(), units, currentParamLocal, body, currentParamLocal.getName());
+                                            body.getLocals().add(currentParamLocal);
+                                            paramList.add(currentParamLocal);
+                                        } else if (ApplicationClassFilter.isClassInSystemPackage(currentParam.toString())) {
+                                            Local currentParamLocal = Jimple.v().newLocal("param" + paramNo, currentParam);
+                                            body.getLocals().add(currentParamLocal);
+
+                                            SootMethod sm = getConstructorMethod(Scene.v().getSootClass(currentParam.toString()));
+                                            if (sm.isStatic()) {
+                                                units.add(Jimple.v().newAssignStmt(currentParamLocal, Jimple.v().newStaticInvokeExpr(sm.makeRef())));
+                                            } else {
+                                                units.add(Jimple.v().newAssignStmt(currentParamLocal, Jimple.v().newNewExpr(RefType.v(currentParam.toString()))));
+                                                units.add(Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr(currentParamLocal, sm.makeRef())));
+                                            }
+
+                                            paramList.add(currentParamLocal);
+                                        } else {
+                                            isPossible2MockPrams = false;
+                                        }
+                                    }
+                                    if (isPossible2MockPrams) {
+                                        if (paramSootMethod.isStatic()) {
+                                            units.add(Jimple.v().newAssignStmt((JimpleLocal) ub.getValue(), Jimple.v().newStaticInvokeExpr(paramSootMethod.makeRef(), paramList)));
+                                        } else {
+                                            units.add(Jimple.v().newAssignStmt((JimpleLocal) ub.getValue(), Jimple.v().newNewExpr(RefType.v(ub.getValue().getType().toString()))));
+                                            units.add(Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr((JimpleLocal) ub.getValue(), paramSootMethod.makeRef(), paramList)));
+                                        }
+                                    } else {
+                                        units.add(Jimple.v().newAssignStmt(ub.getValue(),
+                                                Jimple.v().newStaticInvokeExpr(
+                                                        Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
+                                                        new ImmediateBox(ClassConstant.v(ub.getValue().getType().toString().replaceAll("\\.", "\\/"))).getValue()
+                                                )
+                                        ));
+                                    }
+                                }
                             } else if (ub.getValue().getType() instanceof PrimType) {
 
                                 Value defaultValue4PrimType = newPrimType((PrimType) ub.getValue().getType());
@@ -261,10 +351,51 @@ public class Main {
                 }
             });
 
-            units.add(caseModel.unit);
+            if (caseModel.unit.toString().contains("$r5 = virtualinvoke $r0.<android.content.Context: java.io.File getDir(java.lang.String,int)>(\"dex\", 0)")) {
+                System.out.println("hh");
+            }
+
+            if (caseModel.unit instanceof JAssignStmt) {
+                units.add(caseModel.unit);
+                Type returnType = ((JAssignStmt) caseModel.unit).getLeftOp().getType();
+                if (returnType instanceof PrimType) {
+                    RefType primeType = prime2RefType((PrimType) returnType);
+                    Local returnPrimeRef = addReturnPrimeType(body, primeType);
+                    SootClass primeRefTypeClass = getPrimeRefTypeClass((PrimType) returnType);
+                    units.add(Jimple.v().newAssignStmt(returnPrimeRef, Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(primeRefTypeClass, "valueOf", Arrays.asList((PrimType) returnType), primeType, true), ((JAssignStmt) caseModel.unit).getLeftOp())));
+                    units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(systemOutMethod.getDeclaringClass(), systemOutMethod.getName(), systemOutMethod.getParameterTypes(), systemOutMethod.getReturnType(), true), returnPrimeRef)).getValue()));
+                }else{
+                    units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(systemOutMethod.getDeclaringClass(), systemOutMethod.getName(), systemOutMethod.getParameterTypes(), systemOutMethod.getReturnType(), true), ((JAssignStmt) caseModel.unit).getLeftOp())).getValue()));
+                }
+            } else if (caseModel.unit instanceof JInvokeStmt) {
+                Type returnType = ((JInvokeStmt) caseModel.unit).getInvokeExpr().getMethodRef().getReturnType();
+                if (!returnType.toString().equals(VoidType.v().toString())) {
+                    Local returnRef = addReturnRef(body, returnType);
+                    if (returnRef.getType() instanceof PrimType) {
+                        units.add(Jimple.v().newAssignStmt(returnRef, ((JInvokeStmt) caseModel.unit).getInvokeExpr()));
+                        RefType primeType = prime2RefType((PrimType) returnRef.getType());
+                        Local returnPrimeRef = addReturnPrimeType(body, primeType);
+                        SootClass primeRefTypeClass = getPrimeRefTypeClass((PrimType) returnRef.getType());
+                        units.add(Jimple.v().newAssignStmt(returnPrimeRef, Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(primeRefTypeClass, "valueOf", Arrays.asList((PrimType) returnRef.getType()), primeType, true), returnRef)));
+                        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(systemOutMethod.getDeclaringClass(), systemOutMethod.getName(), systemOutMethod.getParameterTypes(), systemOutMethod.getReturnType(), true), returnPrimeRef)).getValue()));
+                    } else {
+                        units.add(Jimple.v().newAssignStmt(returnRef, ((JInvokeStmt) caseModel.unit).getInvokeExpr()));
+                        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(systemOutMethod.getDeclaringClass(), systemOutMethod.getName(), systemOutMethod.getParameterTypes(), systemOutMethod.getReturnType(), true), returnRef)).getValue()));
+                    }
+                } else {
+                    units.add(caseModel.unit);
+                    units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(systemOutMethod.getDeclaringClass(), systemOutMethod.getName(), systemOutMethod.getParameterTypes(), systemOutMethod.getReturnType(), true), StringConstant.v("void"))).getValue()));
+                }
+            } else {
+                System.out.println("================::::" + caseModel.unit);
+            }
+
+            //units.add(caseModel.unit);
             units.add(Jimple.v().newReturnVoidStmt());
+
         }
 
+        //output xxxTest.class
         String fileName = SourceLocator.v().getFileNameFor(sClass, Options.output_format_class);
         OutputStream streamOut = new JasminOutputStream(
                 new FileOutputStream(fileName));
@@ -275,7 +406,116 @@ public class Main {
         writerOut.flush();
         streamOut.close();
 
+        //output API invocations in minContext for simplicity analysis
+        String apiSequencesFile = GlobalRef.SOOTOUTPUT + "/" + caseModel.sootClassName + ".txt";
+        for (
+                Unit unit : testMethod.getActiveBody().
+
+                getUnits()) {
+            if (unit.toString().contains("thisObject") || unit.toString().contains("thisActivity") || unit.toString().contains("@this") || unit.toString().contains("Test: void out(java.lang.Object)") || unit.toString().equals("return")) {
+                continue;
+            }
+            PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(apiSequencesFile, true)));
+            String methodSig = "";
+            if (unit.toString().contains("<") && unit.toString().contains(">")) {
+                methodSig = Rgex.getSubUtilSimple(unit.toString(), "(<.*>)");
+            }
+            if (StringUtils.isNotBlank(methodSig)) {
+                out.println(methodSig);
+            }
+            out.close();
+        }
+
         return true;
+    }
+
+    private static SootMethod processOutMethod(SootClass sClass) {
+        SootMethod systemOutMethod = new SootMethod("out", Arrays.asList(RefType.v("java.lang.Object")), VoidType.v(), Modifier.PUBLIC | Modifier.STATIC);
+        sClass.addMethod(systemOutMethod);
+        // create empty body
+        JimpleBody body = Jimple.v().newBody(systemOutMethod);
+        systemOutMethod.setActiveBody(body);
+
+        Chain units = body.getUnits();
+
+        Local r0 = Jimple.v().newLocal("r0", RefType.v("java.lang.Object"));
+        Local r1 = Jimple.v().newLocal("r1", RefType.v("android.os.Bundle"));
+        Local r2 = Jimple.v().newLocal("r2", RefType.v("java.lang.StringBuilder"));
+        Local r3 = Jimple.v().newLocal("r3", RefType.v("java.lang.String"));
+        Local r4 = Jimple.v().newLocal("r4", RefType.v("android.app.Instrumentation"));
+        body.getLocals().add(r0);
+        body.getLocals().add(r1);
+        body.getLocals().add(r2);
+        body.getLocals().add(r3);
+        body.getLocals().add(r4);
+
+        units.add(Jimple.v().newIdentityStmt(r0, Jimple.v().newIdentityRefBox(new ParameterRef(RefType.v("java.lang.Object"), 0)).getValue()));
+        units.add(Jimple.v().newAssignStmt(r1, Jimple.v().newNewExpr(RefType.v("android.os.Bundle"))));
+
+        SootClass bundleSootClass = Scene.v().getSootClass("android.os.Bundle");
+        SootMethod bundleSootMethod = bundleSootClass.getMethod("<init>", Arrays.asList(), VoidType.v());
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newSpecialInvokeExpr(r1, Scene.v().makeMethodRef(bundleSootClass, "<init>", bundleSootMethod.getParameterTypes(), bundleSootMethod.getReturnType(), false))).getValue()));
+
+        units.add(Jimple.v().newAssignStmt(r2, Jimple.v().newNewExpr(RefType.v("java.lang.StringBuilder"))));
+
+        SootClass strBuilderSootClass = Scene.v().getSootClass("java.lang.StringBuilder");
+        SootMethod strBuilderSootMethod = strBuilderSootClass.getMethod("<init>", Arrays.asList(), VoidType.v());
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newSpecialInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "<init>", strBuilderSootMethod.getParameterTypes(), strBuilderSootMethod.getReturnType(), false))).getValue()));
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "append", Arrays.asList(RefType.v("java.lang.String")), RefType.v("java.lang.StringBuilder"), false), new ImmediateBox(StringConstant.v("[result]")).getValue())).getValue()));
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "append", Arrays.asList(RefType.v("java.lang.String")), RefType.v("java.lang.StringBuilder"), false), new ImmediateBox(r1).getValue())).getValue()));
+        units.add(Jimple.v().newAssignStmt(r3, Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "toString", Arrays.asList(), RefType.v("java.lang.String"), false))));
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r1, Scene.v().makeMethodRef(bundleSootClass, "putString", Arrays.asList(RefType.v("java.lang.String"), RefType.v("java.lang.String")), VoidType.v(), false), new ImmediateBox(StringConstant.v("stream")).getValue(), new ImmediateBox(r3).getValue())).getValue()));
+
+        SootClass instrumentationRegistrySootClass = Scene.v().getSootClass("androidx.test.platform.app.InstrumentationRegistry");
+        units.add(Jimple.v().newAssignStmt(r4, Jimple.v().newStaticInvokeExpr(Scene.v().makeMethodRef(instrumentationRegistrySootClass, "getInstrumentation", Arrays.asList(), RefType.v("android.app.Instrumentation"), true))));
+
+        SootClass instrumentationSootClass = Scene.v().getSootClass("android.app.Instrumentation");
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newVirtualInvokeExpr(r4, Scene.v().makeMethodRef(instrumentationSootClass, "sendStatus", Arrays.asList(IntType.v(), RefType.v("android.os.Bundle")), VoidType.v(), false), IntConstant.v(0), r1)));
+        units.add(Jimple.v().newReturnVoidStmt());
+
+        return systemOutMethod;
+    }
+
+    private static Local addSysOutputRef(Body body) {
+        Local sysOutputRef = Jimple.v().newLocal("sysOutputRef", RefType.v("java.io.PrintStream"));
+        body.getLocals().add(sysOutputRef);
+        return sysOutputRef;
+    }
+
+    private static Local addReturnRef(Body body, Type returnType) {
+        Local returnRef = Jimple.v().newLocal("returnRef", returnType);
+        body.getLocals().add(returnRef);
+        return returnRef;
+    }
+
+    private static Local addReturnPrimeType(Body body, Type returnType) {
+        Local returnRef = Jimple.v().newLocal("returnPrimeRef", returnType);
+        body.getLocals().add(returnRef);
+        return returnRef;
+    }
+
+    private static SootMethod getConstructorMethod(SootClass sootClass) {
+        if (CollectionUtils.isEmpty(sootClass.getMethods())) {
+            return null;
+        }
+
+        if(sootClass.getName().equals("android.content.Context")){
+            return Scene.v().getMethod("<androidx.test.InstrumentationRegistry: android.content.Context getTargetContext()>");
+        }
+
+        int minParameterCount = 100;
+        for (SootMethod sm : sootClass.getMethods()) {
+            if ((sm.getName().contains("<clinit>") || sm.getName().contains("<init>")) && sm.getParameterCount() < minParameterCount && !sm.isStatic() && sm.isPublic() && !sootClass.isAbstract()) {
+                minParameterCount = sm.getParameterCount();
+            }
+        }
+
+        for (SootMethod sm : sootClass.getMethods()) {
+            if (sm.getParameterCount() == minParameterCount) {
+                return sm;
+            }
+        }
+        return null;
     }
 
     private static NewArrayExpr newNewArrayExpr(String className, Chain units, ValueBox ub, JimpleBody body) {
@@ -387,6 +627,115 @@ public class Main {
         return null;
     }
 
+    private static NewArrayExpr newNewArrayExpr2(String className, Chain units, Local currentParamLocal, JimpleBody body, String paramName) {
+        if (className.startsWith("java.lang.String")) {
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.String"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.String"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), StringConstant.v("android"));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Boolean")) {
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Boolean"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Boolean"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), DIntConstant.v(1, BooleanType.v()));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+        } else if (className.startsWith("java.lang.Byte")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Byte"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Byte"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), DIntConstant.v(1, ByteType.v()));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Character")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Character"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Character"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), DIntConstant.v(1, CharType.v()));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Double")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Double"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Double"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), DoubleConstant.v(1.0));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Float")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Float"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Float"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), FloatConstant.v((float) 1.0));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Integer")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Integer"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Integer"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), IntConstant.v(1));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Long")) {
+
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Long"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Long"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), LongConstant.v(1));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        } else if (className.startsWith("java.lang.Short")) {
+            Local arrayParameter = Jimple.v().newLocal(paramName, ArrayType.v(RefType.v("java.lang.Short"), 1));
+            body.getLocals().add(arrayParameter);
+
+            AssignStmt assignStmt1 = Jimple.v().newAssignStmt(arrayParameter, Jimple.v().newNewArrayExpr(RefType.v("java.lang.Short"), IntConstant.v(1)));
+            units.add(assignStmt1);
+
+            AssignStmt assignStmt = Jimple.v().newAssignStmt(Jimple.v().newArrayRef(arrayParameter, IntConstant.v(0)), IntConstant.v(1));
+            units.add(assignStmt);
+            units.add(Jimple.v().newAssignStmt(currentParamLocal, arrayParameter));
+
+        }
+        return null;
+    }
+
     private static NewArrayExpr newNewArrayExpr(PrimType primType) {
         if (primType instanceof BooleanType) {
             return Jimple.v().newNewArrayExpr(BooleanType.v(), DIntConstant.v(1, BooleanType.v()));
@@ -454,6 +803,71 @@ public class Main {
         return null;
     }
 
+    private static Value newPrimType2(String className) {
+        if (className.startsWith("java.lang.String")) {
+            return StringConstant.v("android");
+        } else if (className.startsWith("java.lang.Boolean")) {
+            return DIntConstant.v(1, BooleanType.v());
+        } else if (className.startsWith("java.lang.Byte")) {
+            return DIntConstant.v(1, ByteType.v());
+        } else if (className.startsWith("java.lang.Character")) {
+            return DIntConstant.v(1, CharType.v());
+        } else if (className.startsWith("java.lang.Double")) {
+            return DoubleConstant.v(1.0);
+        } else if (className.startsWith("java.lang.Float")) {
+            return FloatConstant.v((float) 1.0);
+        } else if (className.startsWith("java.lang.Integer")) {
+            return IntConstant.v(1);
+        } else if (className.startsWith("java.lang.Long")) {
+            return LongConstant.v(1);
+        } else if (className.startsWith("java.lang.Short")) {
+            return IntConstant.v(1);
+        }
+        return null;
+    }
+
+    private static RefType prime2RefType(PrimType primType) {
+        if (primType instanceof LongType) {
+            return RefType.v("java.lang.Long");
+        } else if (primType instanceof BooleanType) {
+            return RefType.v("java.lang.Boolean");
+        } else if (primType instanceof ByteType) {
+            return RefType.v("java.lang.Byte");
+        } else if (primType instanceof CharType) {
+            return RefType.v("java.lang.Character");
+        } else if (primType instanceof DoubleType) {
+            return RefType.v("java.lang.Double");
+        } else if (primType instanceof FloatType) {
+            return RefType.v("java.lang.Float");
+        } else if (primType instanceof IntType) {
+            return RefType.v("java.lang.Integer");
+        } else if (primType instanceof ShortType) {
+            return RefType.v("java.lang.Short");
+        }
+        return null;
+    }
+
+    private static SootClass getPrimeRefTypeClass(PrimType primType) {
+        if (primType instanceof LongType) {
+            return Scene.v().getSootClass("java.lang.Long");
+        } else if (primType instanceof BooleanType) {
+            return Scene.v().getSootClass("java.lang.Boolean");
+        } else if (primType instanceof ByteType) {
+            return Scene.v().getSootClass("java.lang.Byte");
+        } else if (primType instanceof CharType) {
+            return Scene.v().getSootClass("java.lang.Character");
+        } else if (primType instanceof DoubleType) {
+            return Scene.v().getSootClass("java.lang.Double");
+        } else if (primType instanceof FloatType) {
+            return Scene.v().getSootClass("java.lang.Float");
+        } else if (primType instanceof IntType) {
+            return Scene.v().getSootClass("java.lang.Integer");
+        } else if (primType instanceof ShortType) {
+            return Scene.v().getSootClass("java.lang.Short");
+        }
+        return null;
+    }
+
     private static Value newPrimType(PrimType primType) {
         if (primType instanceof BooleanType) {
             return DIntConstant.v(1, BooleanType.v());
@@ -512,16 +926,16 @@ public class Main {
                     availiableLocals.put(localModel, local);
                 }
 
-                if (caseModel.baseBoxStmts.get(i) instanceof JAssignStmt &&  ((JAssignStmt) caseModel.baseBoxStmts.get(i)).getRightOp().getUseBoxes().size() > 0) {
-                    for(ValueBox vb : ((JAssignStmt) caseModel.baseBoxStmts.get(i)).getRightOp().getUseBoxes()){
-                        if(vb.getValue() instanceof JimpleLocal){
+                if (caseModel.baseBoxStmts.get(i) instanceof JAssignStmt && ((JAssignStmt) caseModel.baseBoxStmts.get(i)).getRightOp().getUseBoxes().size() > 0) {
+                    for (ValueBox vb : ((JAssignStmt) caseModel.baseBoxStmts.get(i)).getRightOp().getUseBoxes()) {
+                        if (vb.getValue() instanceof JimpleLocal) {
                             LocalModel lm = new LocalModel();
-                            lm.name = ((JimpleLocal)vb.getValue()).getName();
-                            lm.number = ((JimpleLocal)vb.getValue()).getNumber();
+                            lm.name = ((JimpleLocal) vb.getValue()).getName();
+                            lm.number = ((JimpleLocal) vb.getValue()).getNumber();
 
-                            if(!availiableLocals.containsKey(lm)){
-                                for(LocalModel m : availiableLocals.keySet()){
-                                    if(m.isSameByNameNotNum(lm)){
+                            if (!availiableLocals.containsKey(lm)) {
+                                for (LocalModel m : availiableLocals.keySet()) {
+                                    if (m.isSameByNameNotNum(lm)) {
                                         vb.setValue(availiableLocals.get(m));
                                     }
                                 }
@@ -609,7 +1023,7 @@ public class Main {
         units.add(Jimple.v().newReturnVoidStmt());
     }
 
-    private static void processContextAndParameter(APITestCaseModel caseModel) {
+    private static void processContextAndParameter(APITestCaseModel caseModel, JimpleBody body, Chain units) {
         if (CollectionUtils.isEmpty(caseModel.baseBoxStmts)) {
             return;
         }
@@ -654,12 +1068,82 @@ public class Main {
                 caseModel.baseBoxStmts.add(i, Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr((Local) ((JIdentityStmt) stmt).getLeftOp(), Scene.v().getMethod("<android.content.Intent: void <init>()>").makeRef())));
 
             } else if (stmt instanceof JIdentityStmt && ((JIdentityStmt) stmt).getRightOpBox().getValue() instanceof ParameterRef) {
-                caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(((JIdentityStmt) stmt).getLeftOp(), Jimple.v().newStaticInvokeExpr(
-                        Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
-                        new ImmediateBox(ClassConstant.v(((JIdentityStmt) stmt).getRightOpBox().getValue().getType().toString().replaceAll("\\.", "\\/"))).getValue()
-                )));
-            }
+//                caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(((JIdentityStmt) stmt).getLeftOp(), Jimple.v().newStaticInvokeExpr(
+//                        Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
+//                        new ImmediateBox(ClassConstant.v(((JIdentityStmt) stmt).getRightOpBox().getValue().getType().toString().replaceAll("\\.", "\\/"))).getValue()
+//                )));
 
+                Value leftLocal = ((JIdentityStmt) stmt).getLeftOp();
+                ParameterRef parameterRef = (ParameterRef) ((JIdentityStmt) stmt).getRightOpBox().getValue();
+                SootMethod paramSootMethod = getConstructorMethod(Scene.v().getSootClass(parameterRef.getType().toString()));
+
+                if (paramSootMethod.getParameterCount() == 0) {
+                    if (paramSootMethod.isStatic()) {
+                        caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(leftLocal, Jimple.v().newStaticInvokeExpr(paramSootMethod.makeRef())));
+                    } else {
+                        caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(leftLocal, Jimple.v().newNewExpr(RefType.v(parameterRef.getType().toString()))));
+                        caseModel.baseBoxStmts.add(i, Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr((Local) leftLocal, paramSootMethod.makeRef())));
+                    }
+                } else {
+                    List<Value> paramList = new ArrayList<>();
+                    boolean isPossible2MockPrams = true;
+                    for (int paramNo = 0; paramNo < paramSootMethod.getParameterCount(); paramNo++) {
+                        Type currentParam = paramSootMethod.getParameterType(paramNo);
+                        if (currentParam instanceof PrimType) {
+                            Local currentParamLocal = Jimple.v().newLocal("baseParam" + paramNo, currentParam);
+                            Value currentParamValue = newPrimType((PrimType) currentParam);
+                            body.getLocals().add(currentParamLocal);
+                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                            paramList.add(currentParamValue);
+                        } else if (currentParam instanceof ArrayType && currentParam.getArrayType().baseType instanceof PrimType) {
+                            Local currentParamLocal = Jimple.v().newLocal("baseParam" + paramNo, currentParam);
+                            Value currentParamValue = newNewArrayExpr((PrimType) currentParam.getArrayType().baseType);
+                            body.getLocals().add(currentParamLocal);
+                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                            paramList.add(currentParamValue);
+                        } else if (ApplicationClassFilter.isJavaBasicType(currentParam.toString())) {
+                            Local currentParamLocal = Jimple.v().newLocal("baseParam" + paramNo, currentParam);
+                            Value currentParamValue = newPrimType2(currentParam.toString());
+                            body.getLocals().add(currentParamLocal);
+                            units.add(Jimple.v().newAssignStmt(currentParamLocal, currentParamValue));
+                            paramList.add(currentParamValue);
+                        } else if (currentParam instanceof ArrayType
+                                && currentParam.getArrayType().baseType instanceof RefType
+                                && ApplicationClassFilter.isJavaBasicType(currentParam.getArrayType().baseType.toString())) {
+                            Local currentParamLocal = Jimple.v().newLocal("baseParam" + paramNo, currentParam);
+                            newNewArrayExpr2(currentParam.toString(), units, currentParamLocal, body, currentParamLocal.getName());
+                            body.getLocals().add(currentParamLocal);
+                            paramList.add(currentParamLocal);
+                        } else if (ApplicationClassFilter.isClassInSystemPackage(currentParam.toString())) {
+                            Local currentParamLocal = Jimple.v().newLocal("baseParam" + paramNo, currentParam);
+                            body.getLocals().add(currentParamLocal);
+                            SootMethod constructorMethod = getConstructorMethod(Scene.v().getSootClass(currentParam.toString()));
+                            if (constructorMethod.isStatic()) {
+                                units.add(Jimple.v().newAssignStmt(currentParamLocal, Jimple.v().newStaticInvokeExpr(constructorMethod.makeRef())));
+                            } else {
+                                units.add(Jimple.v().newAssignStmt(currentParamLocal, Jimple.v().newNewExpr(RefType.v(currentParam.toString()))));
+                                units.add(Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr(currentParamLocal, constructorMethod.makeRef())));
+                            }
+                            paramList.add(currentParamLocal);
+                        } else {
+                            isPossible2MockPrams = false;
+                        }
+                    }
+                    if (isPossible2MockPrams) {
+                        if (paramSootMethod.isStatic()) {
+                            caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(leftLocal, Jimple.v().newStaticInvokeExpr(paramSootMethod.makeRef())));
+                        } else {
+                            caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(leftLocal, Jimple.v().newNewExpr(RefType.v(parameterRef.getType().toString()))));
+                            caseModel.baseBoxStmts.add(i, Jimple.v().newInvokeStmt(Jimple.v().newSpecialInvokeExpr((Local) leftLocal, paramSootMethod.makeRef(), paramList)));
+                        }
+                    } else {
+                        caseModel.baseBoxStmts.set(i, Jimple.v().newAssignStmt(leftLocal, Jimple.v().newStaticInvokeExpr(
+                                Scene.v().getMethod("<org.easymock.EasyMock: java.lang.Object createMock(java.lang.Class)>").makeRef(),
+                                new ImmediateBox(ClassConstant.v(parameterRef.getType().toString().replaceAll("\\.", "\\/"))).getValue()
+                        )));
+                    }
+                }
+            }
         }
     }
 
@@ -688,6 +1172,9 @@ public class Main {
     }
 
     private static void addThisIdentityStmt(APITestCaseModel caseModel, SootClass sClass, JimpleBody body, Chain units) {
+        if (caseModel.unit.toString().contains("$r10 = virtualinvoke $r8.<android.content.pm.PackageManager: android.content.pm.PackageInfo getPackageInfo(java.lang.String,int)>($r9, 0)")) {
+            System.out.println("j");
+        }
         if (caseModel.apiType != APIType.STATIC_INVOKE) {
             Unit lastUnit = getLastUnit(caseModel);
             if (!(lastUnit.toString().contains("@this:"))) {
