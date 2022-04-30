@@ -27,7 +27,7 @@ The following is required to set up JUnitTestGen:
 
 ##### Step 1: Load dependencies to your local repository
 * git clone git@bitbucket.org:se_anonymous/junittestgen.git
-* cd JUnitTestGen
+* cd junittestgen
 * ./res/loadDependencies.sh
 
 ##### Step 2: build package：
