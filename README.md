@@ -16,7 +16,7 @@ API list) for which we want to generate unit tests and an Android app that invok
 test case.
 
 The second module, App Compatibility Testing, includes two subprocesses. This module takes as input the previously generated unit test cases to build an Android app, allowing direct executions of the test cases on Android devices running different framework versions (i.e., API levels). The output of this second module is the
-execution results of the test cases concerning different execution environments. Using this, JUnitTestGen can then determine all the Android APIs suffering from potential compatibility issues.We now detail these two modules of JUnitTestGen below.
+execution results of the test cases concerning different execution environments. Using this, JUnitTestGen can then determine all the Android APIs suffering from potential compatibility issues.
 
 ![avatar](JUnitTestGen_workflow.png)
 
