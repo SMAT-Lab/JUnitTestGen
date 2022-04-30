@@ -75,7 +75,7 @@ public class Main {
                 }
                 isTestCaseGenerateSuccess = generateTestCase(caseModel);
             } catch (Exception e) {
-                System.out.println(e);
+                //System.out.println(e);
             }
 
             if (isTestCaseGenerateSuccess) {
@@ -462,7 +462,7 @@ public class Main {
         SootMethod strBuilderSootMethod = strBuilderSootClass.getMethod("<init>", Arrays.asList(), VoidType.v());
         units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newSpecialInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "<init>", strBuilderSootMethod.getParameterTypes(), strBuilderSootMethod.getReturnType(), false))).getValue()));
         units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "append", Arrays.asList(RefType.v("java.lang.String")), RefType.v("java.lang.StringBuilder"), false), new ImmediateBox(StringConstant.v("[result]")).getValue())).getValue()));
-        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "append", Arrays.asList(RefType.v("java.lang.String")), RefType.v("java.lang.StringBuilder"), false), new ImmediateBox(r1).getValue())).getValue()));
+        units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "append", Arrays.asList(RefType.v("java.lang.String")), RefType.v("java.lang.StringBuilder"), false), new ImmediateBox(r0).getValue())).getValue()));
         units.add(Jimple.v().newAssignStmt(r3, Jimple.v().newVirtualInvokeExpr(r2, Scene.v().makeMethodRef(strBuilderSootClass, "toString", Arrays.asList(), RefType.v("java.lang.String"), false))));
         units.add(Jimple.v().newInvokeStmt(Jimple.v().newInvokeExprBox(Jimple.v().newVirtualInvokeExpr(r1, Scene.v().makeMethodRef(bundleSootClass, "putString", Arrays.asList(RefType.v("java.lang.String"), RefType.v("java.lang.String")), VoidType.v(), false), new ImmediateBox(StringConstant.v("stream")).getValue(), new ImmediateBox(r3).getValue())).getValue()));
 
