@@ -28,7 +28,7 @@ The following is required to set up JUnitTestGen:
 * IntelliJ IDEA
 
 ##### Step 1: Load dependencies to your local repository
-* git clone git@github.com:sunxiaobiu/JUnitTestGen.git
+* git clone git@github.com:SMAT-Lab/JUnitTestGen.git
 * cd junittestgen
 * ./res/loadDependencies.sh
 
