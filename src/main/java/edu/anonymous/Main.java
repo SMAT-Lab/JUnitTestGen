@@ -737,91 +737,97 @@ public class Main {
     }
 
     private static NewArrayExpr newNewArrayExpr(PrimType primType) {
+        Random r = new Random();
+        int randomValue = r.nextInt((Integer.MAX_VALUE - 1) + 1) + 1;
         if (primType instanceof BooleanType) {
-            return Jimple.v().newNewArrayExpr(BooleanType.v(), DIntConstant.v(1, BooleanType.v()));
+            return Jimple.v().newNewArrayExpr(BooleanType.v(), DIntConstant.v(randomValue, BooleanType.v()));
         } else if (primType instanceof ByteType) {
-            return Jimple.v().newNewArrayExpr(ByteType.v(), DIntConstant.v(1, ByteType.v()));
+            return Jimple.v().newNewArrayExpr(ByteType.v(), DIntConstant.v(randomValue, ByteType.v()));
         } else if (primType instanceof CharType) {
-            return Jimple.v().newNewArrayExpr(CharType.v(), DIntConstant.v(1, CharType.v()));
+            return Jimple.v().newNewArrayExpr(CharType.v(), DIntConstant.v(randomValue, CharType.v()));
         } else if (primType instanceof DoubleType) {
-            return Jimple.v().newNewArrayExpr(DoubleType.v(), DoubleConstant.v(1.0));
+            return Jimple.v().newNewArrayExpr(DoubleType.v(), DoubleConstant.v(r.nextDouble()));
         } else if (primType instanceof FloatType) {
-            return Jimple.v().newNewArrayExpr(FloatType.v(), FloatConstant.v((float) 1.0));
+            return Jimple.v().newNewArrayExpr(FloatType.v(), FloatConstant.v(r.nextFloat()));
         } else if (primType instanceof IntType) {
-            return Jimple.v().newNewArrayExpr(IntType.v(), IntConstant.v(1));
+            return Jimple.v().newNewArrayExpr(IntType.v(), IntConstant.v(randomValue));
         } else if (primType instanceof Integer127Type) {
-            return Jimple.v().newNewArrayExpr(Integer127Type.v(), IntConstant.v(1));
+            return Jimple.v().newNewArrayExpr(Integer127Type.v(), IntConstant.v(randomValue));
         } else if (primType instanceof Integer1Type) {
-            return Jimple.v().newNewArrayExpr(Integer1Type.v(), IntConstant.v(1));
+            return Jimple.v().newNewArrayExpr(Integer1Type.v(), IntConstant.v(randomValue));
         } else if (primType instanceof Integer32767Type) {
-            return Jimple.v().newNewArrayExpr(Integer32767Type.v(), IntConstant.v(1));
+            return Jimple.v().newNewArrayExpr(Integer32767Type.v(), IntConstant.v(randomValue));
         } else if (primType instanceof LongType) {
-            return Jimple.v().newNewArrayExpr(LongType.v(), LongConstant.v(1));
+            return Jimple.v().newNewArrayExpr(LongType.v(), LongConstant.v(randomValue));
         } else if (primType instanceof ShortType) {
-            return Jimple.v().newNewArrayExpr(ShortType.v(), IntConstant.v(1));
+            return Jimple.v().newNewArrayExpr(ShortType.v(), IntConstant.v(randomValue));
         }
         return null;
     }
 
     private static Value newPrimType(String className, Chain units, ValueBox ub, JimpleBody body) {
+        Random r = new Random();
+        int randomValue = r.nextInt((Integer.MAX_VALUE - 1) + 1) + 1;
         if (className.startsWith("java.lang.String")) {
 
             units.add(Jimple.v().newAssignStmt(ub.getValue(), StringConstant.v("android")));
 
         } else if (className.startsWith("java.lang.Boolean")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(1, BooleanType.v())));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(randomValue, BooleanType.v())));
 
         } else if (className.startsWith("java.lang.Byte")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(1, ByteType.v())));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(randomValue, ByteType.v())));
 
         } else if (className.startsWith("java.lang.Character")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(1, CharType.v())));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), DIntConstant.v(randomValue, CharType.v())));
 
         } else if (className.startsWith("java.lang.Double")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), DoubleConstant.v(1.0)));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), DoubleConstant.v(r.nextDouble())));
 
         } else if (className.startsWith("java.lang.Float")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), FloatConstant.v((float) 1.0)));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), FloatConstant.v(r.nextFloat())));
 
         } else if (className.startsWith("java.lang.Integer")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), IntConstant.v(1)));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), IntConstant.v(randomValue)));
 
         } else if (className.startsWith("java.lang.Long")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), LongConstant.v(1)));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), LongConstant.v(r.nextLong())));
 
         } else if (className.startsWith("java.lang.Short")) {
 
-            units.add(Jimple.v().newAssignStmt(ub.getValue(), IntConstant.v(1)));
+            units.add(Jimple.v().newAssignStmt(ub.getValue(), IntConstant.v(randomValue)));
         }
         return null;
     }
 
     private static Value newPrimType2(String className) {
+        Random r = new Random();
+        int randomValue = r.nextInt((Integer.MAX_VALUE - 1) + 1) + 1;
         if (className.startsWith("java.lang.String")) {
             return StringConstant.v("android");
         } else if (className.startsWith("java.lang.Boolean")) {
-            return DIntConstant.v(1, BooleanType.v());
+            return DIntConstant.v(randomValue, BooleanType.v());
         } else if (className.startsWith("java.lang.Byte")) {
-            return DIntConstant.v(1, ByteType.v());
+            return DIntConstant.v(randomValue, ByteType.v());
         } else if (className.startsWith("java.lang.Character")) {
-            return DIntConstant.v(1, CharType.v());
+            return DIntConstant.v(randomValue, CharType.v());
         } else if (className.startsWith("java.lang.Double")) {
-            return DoubleConstant.v(1.0);
+            return DoubleConstant.v(r.nextDouble());
         } else if (className.startsWith("java.lang.Float")) {
-            return FloatConstant.v((float) 1.0);
+            return FloatConstant.v(r.nextFloat());
         } else if (className.startsWith("java.lang.Integer")) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         } else if (className.startsWith("java.lang.Long")) {
-            return LongConstant.v(1);
+            return LongConstant.v(randomValue);
         } else if (className.startsWith("java.lang.Short")) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         }
         return null;
     }
@@ -869,28 +875,30 @@ public class Main {
     }
 
     private static Value newPrimType(PrimType primType) {
+        Random r = new Random();
+        int randomValue = r.nextInt((Integer.MAX_VALUE - 1) + 1) + 1;
         if (primType instanceof BooleanType) {
-            return DIntConstant.v(1, BooleanType.v());
+            return DIntConstant.v(randomValue, BooleanType.v());
         } else if (primType instanceof ByteType) {
-            return DIntConstant.v(1, ByteType.v());
+            return DIntConstant.v(randomValue, ByteType.v());
         } else if (primType instanceof CharType) {
-            return DIntConstant.v(32, CharType.v());
+            return DIntConstant.v(randomValue, CharType.v());
         } else if (primType instanceof DoubleType) {
-            return DoubleConstant.v(1.0);
+            return DoubleConstant.v(r.nextDouble());
         } else if (primType instanceof FloatType) {
-            return FloatConstant.v((float) 1.0);
+            return FloatConstant.v(r.nextFloat());
         } else if (primType instanceof IntType) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         } else if (primType instanceof Integer127Type) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         } else if (primType instanceof Integer1Type) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         } else if (primType instanceof Integer32767Type) {
-            return IntConstant.v(1);
+            return IntConstant.v(randomValue);
         } else if (primType instanceof LongType) {
-            return LongConstant.v(1);
+            return LongConstant.v(randomValue);
         } else if (primType instanceof ShortType) {
-            return IntConstant.v(1);
+            return IntConstant.v((short) r.nextInt(Short.MAX_VALUE + 1));
         }
         return null;
     }

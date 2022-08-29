@@ -8,6 +8,8 @@ Thus, we propose a novel prototype tool, JUnitTestGen, that mines existing Andro
 results on thousands of real-world Android apps show that (1) JUnitTestGen is capable of automatically generating valid unit test cases for Android APIs with an 80.4% success rate; (2) the automatically generated test cases are useful for pinpointing APIinduced
 compatibility issues, including not only signature-based but also semantics-based compatibility issues; and (3) JUnitTestGen outperforms the state-of-the-practice test generation tool, EvoSuite, and the state-of-the-art static compatibility detection tool, CiD, in pinpointing compatibility issues.
 
+Our paper has been accepted at ASE 2022.
+
 ## Approach
 The following figure outlines the process of JUnitTestGen, which is made up of two modules involving a total of nine steps. We first locate target API invocations after disassembling the APK bytecode. We
 then apply inter-procedural data-flow analysis to identify the API usage, including API caller instance inference and API parameter value inference. We then execute these generated test cases on
@@ -26,7 +28,7 @@ The following is required to set up JUnitTestGen:
 * IntelliJ IDEA
 
 ##### Step 1: Load dependencies to your local repository
-* git clone git@github.com:seanonymousreview/junittestgen.git
+* git clone git@github.com:sunxiaobiu/JUnitTestGen.git
 * cd junittestgen
 * ./res/loadDependencies.sh
 
